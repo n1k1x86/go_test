@@ -41,7 +41,7 @@ func (t *TaskRepository) CloseConnection() {
 }
 
 func (t *TaskRepository) GetAllTasks() []*model.Task {
-	rows, err := t.db.Query("SELECT title, description FROM tasks;")
+	rows, err := t.db.Query("SELECT id, title, description, duedate FROM tasks;")
 
 	check(err)
 
@@ -49,38 +49,51 @@ func (t *TaskRepository) GetAllTasks() []*model.Task {
 
 	for rows.Next() {
 		task := &model.Task{}
-		err = rows.Scan(&task.Title, &task.Description)
+		var dueDate sql.NullString
+		err = rows.Scan(&task.Id, &task.Title, &task.Description, &dueDate)
+		if dueDate.Valid {
+			task.DueDate = dueDate.String
+		}
 		check(err)
 		tasks = append(tasks, task)
-	}
-
-	for _, task := range tasks {
-		fmt.Println(*task)
 	}
 
 	return tasks
 }
 
 func (t *TaskRepository) GetTaskById(id int) (*model.Task, error) {
-	row := t.db.QueryRow("SELECT id, title, description FROM tasks WHERE id = $1", id)
+	row := t.db.QueryRow("SELECT id, title, description, duedate FROM tasks WHERE id = $1", id)
 	task := &model.Task{}
-	row.Scan(&task.Id, &task.Title, &task.Description)
+	var dueDate sql.NullString
+	row.Scan(&task.Id, &task.Title, &task.Description, &dueDate)
+	if dueDate.Valid {
+		task.DueDate = dueDate.String
+	}
 	if task.Id != id {
 		return task, errors.New("task not found")
 	}
 	return task, nil
 }
 
-func (t *TaskRepository) AddTask(title string, description string, dueDate string) error {
+func (t *TaskRepository) AddTask(task *model.Task) error {
 	nowTime := time.Now().UTC().Format(time.RFC3339)
-	_, err := t.db.Exec("INSERT INTO tasks (title, description, duedate, created_at, updated_at) VALUES ($1,$2,$3,$4,$4)", title, description, dueDate, nowTime)
+	if task.DueDate == "" {
+		return errors.New("dueDate is a neseccery field")
+	}
+
+	_, err := time.Parse(time.RFC3339, task.DueDate)
+	if err != nil {
+		return errors.New("invalid dueDate format, example is '2023-10-05T14:48:00Z'")
+	}
+
+	_, err = t.db.Exec("INSERT INTO tasks (title, description, duedate, created_at, updated_at) VALUES ($1,$2,$3,$4,$4)", task.Title, task.Description, task.DueDate, nowTime)
 	check(err)
 	return err
 }
 
-func (t *TaskRepository) UpdateTask(id int, title string, description string, dueDate string) error {
+func (t *TaskRepository) UpdateTask(task *model.Task, taskId int) error {
 	nowTime := time.Now().UTC().Format(time.RFC3339)
-	res, err := t.db.Exec("UPDATE tasks SET title = $1, description = $2, duedate = $3, updated_at = $4 WHERE id = $5", title, description, dueDate, nowTime, id)
+	res, err := t.db.Exec("UPDATE tasks SET title = $1, description = $2, duedate = $3, updated_at = $4 WHERE id = $5", task.Title, task.Description, task.DueDate, nowTime, taskId)
 	check(err)
 	rowsCount, err := res.RowsAffected()
 	check(err)

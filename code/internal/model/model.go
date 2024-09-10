@@ -1,8 +1,8 @@
 package model
 
 type Task struct {
-	Id          int
-	Title       string
-	Description string
-	DueDate     string
+	Id          int    `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	DueDate     string `json:"dueDate"`
 }
